@@ -125,6 +125,8 @@ Example:
   "banner_text": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1"
 }
 ~~~~~
+
+~~~~~
 Message: EVENT_REPORT
 Description: Relays a captured attacker interaction to the Central Brain for classification
 Sender: Honeypot Node → Central Brain
