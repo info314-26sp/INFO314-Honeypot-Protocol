@@ -203,6 +203,60 @@ Example:
 }
 ~~~~~
 
+~~~~~
+Message: AUTH
+Description: Authenticates the honeypot node to the central brain for initialization
+Sender: Honeypot Node → Central Brain
+
+Format: JSON over TCP
+
+Fields:
+- node_id (string, required)
+- timpstamp (long, required)
+- credentials (string, required) - Node's security certificate
+- attempts (int, optional) - Incremented if there are prior unsuccessful AUTH attempts
+
+Response:
+- CONFIG_UPDATE
+
+Side Effects:
+- Central brain recognizes node as part of the secure network
+- If no response is recieved, node assumes monitoring protocols and reattempts authorization. The failure to connect will be recorded and presented to central brain upon connection. 
+
+Example:
+{
+  "type": "AUTH",
+  "timestamp": 1771434180000,
+  "credentials": "90nWW88O0lOl1sJ8oM1jkk42FIJ8O9A9P44UlFW1ojI7712Mjn42Mfq8sP90jR199aOK1JkIPdOsifiI9j7nQQf9kf2FfkwOk7j8U2jn9O7lpQQpW2O4I0njOk4kd"
+}
+~~~~~
+
+~~~~~
+Message: ECHO
+Description: Responds to PING message from Central Brain to confirm liveness.
+Sender: Honeypot Node → Central Brain
+
+Format: JSON over TCP
+
+Fields:
+- msg_id (string, required)
+- node_id (string, required)
+- timpstamp (long, required)
+
+Response:
+- No response
+
+Side Effects:
+- 
+
+Example:
+{
+  "type": "ECHO",
+  "msg_id": "b289f0b8-ed66-4570-b249-d00be6a33cf3",
+  "timestamp": 1771434180000
+}
+~~~~~
+
 **Central Brain**
 
 ~~~~~
