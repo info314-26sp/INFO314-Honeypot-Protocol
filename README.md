@@ -21,7 +21,7 @@ The system is composed of three independently running components:
 | **Event Store** | Persists classified events and node status data, exposes a query interface for analysts |
 
 
-![Arcnitecture Diagram](.\images\systemArchOverview.png)
+![Architecture Diagram](images/systemArchOverview.png)
 
 
 ---
