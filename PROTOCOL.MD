@@ -13,7 +13,7 @@ By Anthony Covello, Francis Dinh, Eli Gold
 **Honeypot Node:**
 - HEARTBEAT (to Brain) ~ Let Brain know it's active >> Anthony
 - EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
-- FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >>
+- FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >> Anthony
 - AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
 - PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >> Francis (Renamed to ECHO)
 - COMMAND_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted >> Anthony
@@ -166,6 +166,8 @@ Example:
 ~~~~~
 
 **Central Brain**
+
+~~~~~
 Message: PING
 Description: Requests a response from honeypot nodes
 Sender: Central Brain -> Honeypot node
@@ -182,11 +184,11 @@ Example:
   "ping_id": 50,
   "time": -27107477939000
 }
-
+~~~~~
 
 ~~~~~
 Message: CONTROL_COMMAND
-Description: Specific, in-moment instructions and adjustments sent to a Honeypot Node as a reaction to detected attack behavior 
+Description: Specific, in-moment instructions and adjustments sent to a Honeypot Node as a reaction to detected attack behavior. Issued command changes are expected to expire after the Honeypot Node's current connection is dropped.
 Sender: Central Brain → Honeypot Node
 
 Format: JSON over TCP
@@ -194,7 +196,7 @@ Format: JSON over TCP
 Fields:
 - msg_id (string, required)
 - rec_node_id (string, required)
-- commands (array of objects, required)
+- cc_commands (array of objects, required)
   - command (string, required)
   - parameters (object, optional)
 - timestamp (long, required)
@@ -203,18 +205,57 @@ Response:
 - CMD_ACK
 
 Side Effects:
-- The specified Honeypot Node attempts to apply the received commands, and responds with a CMD_ACK indicating success or failure
+- The specified Honeypot Node attempts to apply the received commands for the duration of the current connection, resetting to current baseline behavior after disconnection. It responds with a CMD_ACK indicating if the application was a success or failure
 
 Example:
 {
   "type": "CONTROL_COMMAND",
   "msg_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "rec_node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
-  "commands": [
+  "cc_commands": [
     {
       "command": "SLOW_RESPONSE",
       "parameters": {
         "delay_ms": 5000
+      }
+    }
+  ],
+  "timestamp": 1771434120000
+}
+~~~~~
+
+
+~~~~~
+Message: CONFIG_UPDATE
+Description: Sends a command to a specific Honeypot Node to update its operational parameters and baseline behavior, overwriting previous behavior.
+Sender: Central Brain → Honeypot Node
+
+Format: JSON over TCP
+
+Fields:
+- msg_id (string, required)
+- rec_node_id (string, required)
+- cu_commands (array of objects, required)
+  - command (string, required)
+  - parameters (object, optional)
+- timestamp (long, required)
+
+Response:
+- CMD_ACK
+
+Side Effects:
+- The specified Honeypot Node attempts to apply the received config update by overwriting it's previous behavior. It responds with a CMD_ACK indicating success or failure
+
+Example:
+{
+  "type": "CONFIG_UPDATE",
+  "msg_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "rec_node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
+  "cu_commands": [
+    {
+      "command": "SET_PORTS",
+      "parameters": {
+        "port_num": 80
       }
     }
   ],
