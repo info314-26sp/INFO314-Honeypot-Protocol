@@ -203,6 +203,32 @@ Example:
 }
 ~~~~~
 
+~~~~~
+Message: ECHO
+Description: Responds to PING message from Central Brain to confirm liveness.
+Sender: Honeypot Node → Central Brain
+
+Format: JSON over TCP
+
+Fields:
+- msg_id (string, required)
+- node_id (string, required)
+- timpstamp (long, required)
+
+Response:
+- No response
+
+Side Effects:
+- 
+
+Example:
+{
+  "type": "ECHO",
+  "msg_id": "b289f0b8-ed66-4570-b249-d00be6a33cf3",
+  "timestamp": 1771434180000
+}
+~~~~~
+
 **Central Brain**
 
 ~~~~~
