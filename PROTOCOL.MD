@@ -9,22 +9,20 @@ By Anthony Covello, Francis Dinh, Eli Gold
 **Sent by..**
 - MESSAGE_NAME (sent to whom) ~ Purpose >> Claimed By
 
-
 **Honeypot Node:**
 - HEARTBEAT (to Brain) ~ Let Brain know it's active >> Anthony
 - EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
 - FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >> Anthony
 - AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
-- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >> Francis (Renamed to ECHO)
+- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm it's alive >> Francis (Renamed to ECHO)
 - COMMAND_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted >> Anthony
 
-
 **Central Brain:**
-- CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior  >> Anthony
+- CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior >> Anthony
 - CONFIG_UPDATE (to Honeypot) ~ Lets Honeypot know its operational parameters and baseline behavior >> ANTHONY
 - PING (to Honeypot) ~ Sent to Honeypot to check if its still active after the defined # of HEARTBEAT misses >> Francis
 - STORE_EVENT (to Store) ~ Sends parsed and defined Event Data to Event Store for storage >> Eli
-- NODE_STATUS (to Store) ~ Sends Node Status updates to Event Store for storage >> Eli 
+- NODE_STATUS (to Store) ~ Sends Node Status updates to Event Store for storage >> Eli
 
 **Event Store:**
 - ACK (to Central Brain) ~ Sent to Brain to acknowledge data has been recieved and stored >> Eli
@@ -42,7 +40,6 @@ This protocol specification should include:
 6. Expected response(s) (if any)
 7. Any expected side effects (e.g., "saves the message to disk")
 8. At least one example message for each
-
 
 ### *Example*
 
@@ -76,27 +73,6 @@ Example: (R8)
 ### Message References
 
 **Honeypot Nodes**
-~~~~~
-Message: EVENT_REPORT
-Description: Relays an event to the central brain server
-Sender: Honeypot node -> Central Brain
-
-Format: JSON over TCP
-
-Fields: 
-- node_id (int, required)
-- event (string, required)
-- time (time, required)
-- 
-
-Response: 
-- Acknowledgement
-
-Side Effects:
-- Central brain checks for other events from other honeypot nodes
-- Report is stored to Event Store
-
-~~~~~
 
 ~~~~~
 Message: HEARTBEAT
@@ -125,6 +101,7 @@ Example:
   "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
   "timestamp": 1771434120000
 }
+~~~~~
 
 ~~~~~
 Message: EVENT_REPORT
@@ -133,7 +110,7 @@ Sender: Honeypot Node → Central Brain
 
 Format: JSON over TCP
 
-Fields: 
+Fields:
 - msg_id (string, required)
 - node_id (string, required)
 - timestamp (long, required)
@@ -151,8 +128,7 @@ Side Effects:
 - If severity threshold is met, Central Brain dispatches a CONTROL_COMMAND to the originating node
 - Central Brain forwards classified event to Event Store via STORE_EVENT
 
-Example: 
-
+Example:
 {
   "type": "EVENT_REPORT",
   "msg_id": "a1b2c3d4-0001-4aaa-8888-000000000001",
@@ -167,6 +143,7 @@ Example:
     "password": "admin123"
   }
 }
+~~~~~
 
 ~~~~~
 Message: CMD_ACK
@@ -201,7 +178,6 @@ Example:
   "error_msg": "INVALID_CONFIG",
   "timestamp": 1771434120000
 }
-
 ~~~~~
 
 **Central Brain**
@@ -209,7 +185,7 @@ Example:
 ~~~~~
 Message: PING
 Description: Requests a response from honeypot nodes
-Sender: Central Brain -> Honeypot node
+Sender: Central Brain → Honeypot Node
 
 Format: JSON over TCP
 
@@ -263,7 +239,6 @@ Example:
 }
 ~~~~~
 
-
 ~~~~~
 Message: CONFIG_UPDATE
 Description: Sends a command to a specific Honeypot Node to update its operational parameters and baseline behavior, overwriting previous behavior.
@@ -300,6 +275,8 @@ Example:
   ],
   "timestamp": 1771434120000
 }
+~~~~~
+
 ~~~~~
 Message: STORE_EVENT
 Description: Sent by the Central Brain to the Event Store to persist a classified attack event.
@@ -346,6 +323,7 @@ Example:
   "timestamp": 1771434120000
 }
 ~~~~~
+
 ~~~~~
 Message: NODE_STATUS
 Description: Sent by the Central Brain to the Event Store to record a change in a Honeypot Node's operational status.
@@ -379,9 +357,7 @@ Example:
 }
 ~~~~~
 
-
 **Event Store**
-~~~~~
 
 ~~~~~
 Message: ACK
@@ -411,6 +387,8 @@ Example:
   "success": true,
   "timestamp": 1771434120500
 }
+~~~~~
+
 ~~~~~
 Message: QUERY_RESPONSE
 Description: Sent by the Event Store to deliver requested records to an analyst.
