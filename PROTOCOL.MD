@@ -12,16 +12,16 @@ By Anthony Covello, Francis Dinh, Eli Gold
 
 **Honeypot Node:**
 - HEARTBEAT (to Brain) ~ Let Brain know it's active >>
-- EVENT_REPORT (to Brain) ~ Let Brain know about an Event >>
+- EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
 - FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >>
-- AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >>
-- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >>
+- AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
+- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >> Francis
 
 
 **Central Brain:**
 - CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior  >>
 - CONFIG_UPDATE (to Honeypot) ~ Lets Honeypot know its operational parameters and baseline behavior >>
-- PING (to Honeypot) ~ Sent to Honeypot to check if its still active after the defined # of HEARTBEAT misses >>
+- PING (to Honeypot) ~ Sent to Honeypot to check if its still active after the defined # of HEARTBEAT misses >> Francis
 - STORE_EVENT (to Store) ~ Sends parsed and defined Event Data to Event Store for storage >>
 - NODE_STATUS (to Store) ~ Sends Node Status updates to Event Store for storage >>
 
