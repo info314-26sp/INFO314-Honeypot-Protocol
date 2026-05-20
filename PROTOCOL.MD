@@ -11,7 +11,7 @@ By Anthony Covello, Francis Dinh, Eli Gold
 
 
 **Honeypot Node:**
-- HEARTBEAT (to Brain) ~ Let Brain know it's active >>
+- HEARTBEAT (to Brain) ~ Let Brain know it's active >> Anthony
 - EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
 - FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >>
 - AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
@@ -93,6 +93,36 @@ Response:
 Side Effects:
 - Central brain checks for other events from other honeypot nodes
 - Report is stored to Event Store
+
+
+Message: HEARTBEAT
+Description: Message sent at every 30 second interval to confirm node's operational status
+Sender: Honeypot Node → Central Brain
+
+Format: JSON over TCP
+
+Fields:
+- seq_Num (int, required)
+- msg_id (string, required)
+- node_id (string, required)
+- timestamp (long, required)
+
+Response:
+- No response
+
+Side Effects:
+- Central Brain knows the sending Node is active, and can keep its list of active nodes updated.
+
+Example:
+{
+  "type": "HEARTBEAT",
+  "seq_Num": 1,
+  "msg_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "node_ID": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
+  "timestamp": 1771434120000
+}
+
+
 
 **Central Brain**
 Message: PING
