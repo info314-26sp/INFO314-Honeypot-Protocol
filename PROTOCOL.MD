@@ -125,7 +125,29 @@ Example:
   "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
   "timestamp": 1771434120000
 }
+~~~~~
 
+~~~~~
+Message: FAKE_BANNER
+Description: A plaintext banner sent to an external actor. Meant to simulate a real vulnerable service and encourage the external actor to engage with the node further.
+Sender: Honeypot Node → External Interactor
+
+Format: Plaintext over TCP
+
+Fields:
+- banner_text (string, required) {raw plaintext}
+
+Response:
+- No expected Message response, but any data sent back by the external interactor is logged by the Honeypot Node.
+
+Side Effects:
+- The external interactor believes thay're connected to a real service, as presented by FAKE_BANNER's message. Allows Honeypot Node to further monitor the external actor's behavior.
+
+Example:
+{
+  "type": "FAKE_BANNER",
+  "banner_text": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1"
+}
 ~~~~~
 
 
