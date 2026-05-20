@@ -30,14 +30,14 @@ The system is composed of three independently running components:
 
 All components communicate exclusively over TCP using HDP, a custom JSON-based messaging protocol. The protocol is designed for internal use only and is never exposed to the network being monitored.
 
-See the full message specification in [`PROTOCOL.md`](./PROTOCOL.md).
+See the full message specification in [`PROTOCOL.md`](PROTOCOL.md).
 
 ---
 
 
 ## Further Reading
-[Protocol Specification](./PROTOCOL.md)  
-[Project Proposal](./PROPOSAL.md)
+[Protocol Specification](PROTOCOL.md)  
+[Project Proposal](PROPOSAL.md)
 
 ---
 
