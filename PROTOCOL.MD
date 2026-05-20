@@ -184,20 +184,28 @@ Example:
 
 ~~~~~
 Message: PING
-Description: Requests a response from honeypot nodes
+Description: Sent by the Central Brain to a Honeypot Node to confirm liveness after missed heartbeats.
 Sender: Central Brain → Honeypot Node
 
 Format: JSON over TCP
 
 Fields:
-- ping_id (int, required)
-- time (time, required)
+- msg_id (string, required)
+- target_node_id (string, required)
+- timestamp (long, required)
+
+Response:
+- ECHO
+
+Side Effects:
+- If no ECHO is received within the timeout window, the Central Brain marks the node as offline and sends a NODE_STATUS to the Event Store
 
 Example:
 {
   "type": "PING",
-  "ping_id": 50,
-  "time": -27107477939000
+  "msg_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "target_node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
+  "timestamp": 1771434180000
 }
 ~~~~~
 
