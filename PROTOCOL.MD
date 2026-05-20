@@ -15,7 +15,7 @@ By Anthony Covello, Francis Dinh, Eli Gold
 - EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
 - FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >>
 - AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
-- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >> Francis
+- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm  it's alive >> Francis (Renamed to ECHO)
 
 
 **Central Brain:**
@@ -71,3 +71,45 @@ Example: (R8)
   "priority": 2
 }
 ~~~~~
+
+### Message References
+
+**Honeypot Nodes**
+Message: EVENT_REPORT
+Description: Relays an event to the central brain server
+Sender: Honeypot node -> Central Brain
+
+Format: JSON over TCP
+
+Fields: 
+- node_id (int, required)
+- event (string, required)
+- time (time, required)
+- 
+
+Response: 
+- Acknowledgement
+
+Side Effects:
+- Central brain checks for other events from other honeypot nodes
+- Report is stored to Event Store
+
+**Central Brain**
+Message: PING
+Description: Requests a response from honeypot nodes
+Sender: Central Brain -> Honeypot node
+
+Format: JSON over TCP
+
+Fields:
+- ping_id (int, required)
+- time (time, required)
+
+Example:
+{
+  "type": "PING",
+  "ping_id": 50,
+  "time": -27107477939000
+}
+
+**Event Store**
