@@ -12,7 +12,7 @@ The HDP is designed exclusively for internal communication between honeypot node
 
 ##    		 **System Architecture Overview**
 
-![Architecture Diagram](.\images\systemArchOverview.png)
+![Architecture Diagram](images/systemArchOverview.png)
 
 The system is composed of three independently running components that communicate exclusively over TCP using the Honeypot Detection Protocol (HDP), a custom JSON-based messaging protocol designed for this project. The three components are the Honeypot Node, the Central Brain, and the Event Store.
 
@@ -51,13 +51,13 @@ The Event Store maintains a persistent database of all system records, including
 
 The attacker establishes a TCP connection to the Honeypot Node, which responds with a FAKE\_BANNER to present itself as a real service. The attacker sends probe data or credentials, which the node records locally. The Honeypot Node then forwards a structured EVENT\_REPORT to the Central Brain. The Central Brain classifies the behavior and sends a STORE\_EVENT to the Event Store for persistence. The Event Store persists the record and returns an ACK. If the classification meets a severity threshold, the Central Brain issues a CONTROL\_COMMAND back to the Honeypot Node to adjust its behavior.
 
-![Example Scenario 1](.\images\scenario1.png)
+![Example Scenario 1](images/scenario1.png)
 
 **Scenario \#2: Node Goes Offline**
 
 The Honeypot Node sends periodic HEARTBEAT messages to the Central Brain to signal liveness. When the Central Brain fails to receive a HEARTBEAT after three consecutive intervals, it sends a PING to the node to confirm whether it is still reachable. If no response arrives, the Central Brain updates its internal node status registry and sends a NODE\_STATUS message to the Event Store recording the node identity, failure time, and current state. The Event Store persists the record and returns an ACK.
 
-![Example Scenario 2](.\images\scenario2.png)
+![Example Scenario 2](images/scenario2.png)
 
 ## **Error Handling**
 
