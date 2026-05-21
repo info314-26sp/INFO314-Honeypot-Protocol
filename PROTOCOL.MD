@@ -1,32 +1,25 @@
 # Project Draft 1 - HDP Protocol Design
 By Anthony Covello, Francis Dinh, Eli Gold
 
-**Protocol List** 
-*Everyone Please Select 4. Just put your name text to one to claim. Maybe start defining them below the list here or something.*
-
 ---
-### Format Example
-**Sent by..**
-- MESSAGE_NAME (sent to whom) ~ Purpose >> Claimed By
-
 **Honeypot Node:**
-- HEARTBEAT (to Brain) ~ Let Brain know it's active >> Anthony
-- EVENT_REPORT (to Brain) ~ Let Brain know about an Event >> Francis
-- FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User >> Anthony
-- AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node >> Francis
-- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm it's alive >> Francis (Renamed to ECHO)
-- COMMAND_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted >> Anthony
+- HEARTBEAT (to Brain) ~ Let Brain know it's active 
+- EVENT_REPORT (to Brain) ~ Let Brain know about an Event
+- FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User 
+- AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node
+- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm it's alive 
+- COMMAND_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted 
 
 **Central Brain:**
-- CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior >> Anthony
-- CONFIG_UPDATE (to Honeypot) ~ Lets Honeypot know its operational parameters and baseline behavior >> ANTHONY
-- PING (to Honeypot) ~ Sent to Honeypot to check if its still active after the defined # of HEARTBEAT misses >> Francis
-- STORE_EVENT (to Store) ~ Sends parsed and defined Event Data to Event Store for storage >> Eli
-- NODE_STATUS (to Store) ~ Sends Node Status updates to Event Store for storage >> Eli
+- CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior
+- CONFIG_UPDATE (to Honeypot) ~ Lets Honeypot know its operational parameters and baseline behavior
+- PING (to Honeypot) ~ Sent to Honeypot to check if its still active after the defined # of HEARTBEAT misses
+- STORE_EVENT (to Store) ~ Sends parsed and defined Event Data to Event Store for storage 
+- NODE_STATUS (to Store) ~ Sends Node Status updates to Event Store for storage
 
 **Event Store:**
-- ACK (to Central Brain) ~ Sent to Brain to acknowledge data has been recieved and stored >> Eli
-- QUERY_RESPONSE (to external user) ~ Sent to external user to meet the demands of their query >> Eli
+- ACK (to Central Brain) ~ Sent to Brain to acknowledge data has been recieved and stored
+- QUERY_RESPONSE (to external user) ~ Sent to external user to meet the demands of their query 
 
 ---
 ### **Requirements and Example:**
@@ -120,10 +113,8 @@ Side Effects:
 - The external interactor believes thay're connected to a real service, as presented by FAKE_BANNER's message. Allows Honeypot Node to further monitor the external actor's behavior.
 
 Example:
-{
-  "type": "FAKE_BANNER",
-  "banner_text": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1"
-}
+
+SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.1
 ~~~~~
 
 ~~~~~
@@ -212,12 +203,13 @@ Format: JSON over TCP
 
 Fields:
 - node_id (string, required)
-- timpstamp (long, required)
+- timestamp (long, required)
 - credentials (string, required) - Node's security certificate
 - attempts (int, optional) - Incremented if there are prior unsuccessful AUTH attempts
 
 Response:
-- CONFIG_UPDATE
+- CONFIG_UPDATE on success
+- Connection dropped on failure
 
 Side Effects:
 - Central brain recognizes node as part of the secure network
@@ -227,7 +219,8 @@ Example:
 {
   "type": "AUTH",
   "timestamp": 1771434180000,
-  "credentials": "90nWW88O0lOl1sJ8oM1jkk42FIJ8O9A9P44UlFW1ojI7712Mjn42Mfq8sP90jR199aOK1JkIPdOsifiI9j7nQQf9kf2FfkwOk7j8U2jn9O7lpQQpW2O4I0njOk4kd"
+  "credentials": "90nWW88O0lOl1sJ8oM1jkk42FIJ8O9A9P44UlFW1ojI7712Mjn42Mfq8sP90jR199aOK1JkIPdOsifiI9j7nQQf9kf2FfkwOk7j8U2jn9O7lpQQpW2O4I0njOk4kd",
+  "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2"
 }
 ~~~~~
 
@@ -241,19 +234,20 @@ Format: JSON over TCP
 Fields:
 - msg_id (string, required)
 - node_id (string, required)
-- timpstamp (long, required)
+- timestamp (long, required)
 
 Response:
 - No response
 
 Side Effects:
-- 
+- Central brain marks node back online if it was previously flagged as unresponsive
 
 Example:
 {
   "type": "ECHO",
   "msg_id": "b289f0b8-ed66-4570-b249-d00be6a33cf3",
-  "timestamp": 1771434180000
+  "timestamp": 1771434180000,
+  "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2"
 }
 ~~~~~
 
