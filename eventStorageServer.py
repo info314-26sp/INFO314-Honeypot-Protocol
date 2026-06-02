@@ -21,25 +21,33 @@ def ack(msg_id, success, error_msg=""):
 
 # Probably stores
 def store_event(event):
-    if check_duplicate_event(event):
+    # load file's material
+    try:
+        with open(file_location, 'r') as file:
+            events = json.load(file)
+    except FileNotFoundError:
+        events = []
+
+    if check_duplicate_event(events, event):
         return ack(event["msg_id"], False, f"Event {event["event_id"]} already logged")
-    
+
+    # write file + add new event
+    events.append(event) 
     try: 
         with open(file_location, 'w') as file:
-            json.dump(event, file)
+            json.dump(events, file)
     except:  # I dont know what exceptions this can throw
         ack(event["msg_id"], False, f"Event {event["event_id"]} failed to log")
 
     return ack(event["msg_id"], True)
 
 # Checks the log file to check if event_id has already been logged
-def check_duplicate_event(event):
-    try:
-        with open(file_location, 'r') as file:
-            events = json.load(file)
-    except FileNotFoundError:
-        return False
-    
+def check_duplicate_event(events, event):
+    # try:
+    #     with open(file_location, 'r') as file:
+    #         events = json.load(file)
+    # except FileNotFoundError:
+    #     return False
     seen_events = [events["event_id"] for item in events]
     print(seen_events)
 
@@ -60,7 +68,7 @@ def handle_connection(sock, addr):
     msg_type = event["type"]
 
     if (msg_type == "STORE_EVENT" or msg_type == "NODE_STATUS"):
-        store_event(event)
+        return store_event(event)
     else:
         print("Uh oh... Invalid thing")
 
