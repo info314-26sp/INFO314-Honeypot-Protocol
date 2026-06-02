@@ -8,7 +8,7 @@ file_location = "eventLog.json"
 
 # Acknowledges everything from central brain
 def ack(msg_id, success, error_msg=""):
-    response = (
+    return json.dumps(
         {
             "type": "ACK",
             "ack_for_msg_id": msg_id,
@@ -16,10 +16,7 @@ def ack(msg_id, success, error_msg=""):
             "error_msg": error_msg,
             "timestamp": int(time.time() * 1000) # milliseconds
         }
-    )
-    size = f"len(response)"
-
-    return f"{size} "
+    ) + "\n"
 
 
 # Probably stores
@@ -31,20 +28,25 @@ def store_event(event):
         with open(file_location, 'w') as file:
             json.dump(event, file)
     except:  # I dont know what exceptions this can throw
-        ack(event["msg_id"], False, f"Event {event.event_id} failed to log")
+        ack(event["msg_id"], False, f"Event {event["event_id"]} failed to log")
 
     return ack(event["msg_id"], True)
 
 # Checks the log file to check if event_id has already been logged
 def check_duplicate_event(event):
-    with open(file_location, 'r') as file:
-        events = json.load(file)
+    try:
+        with open(file_location, 'r') as file:
+            events = json.load(file)
+    except FileNotFoundError:
+        return False
+    
     seen_events = [events["event_id"] for item in events]
     print(seen_events)
 
 # Takes in incoming stream and converts it into event object (kson)
 # Finishes recieving with }\n
 def handle_connection(sock, addr):
+    print("Recieving connection")
 
     recieved = b""
     while not recieved.endswith(b"}\n"):
@@ -52,14 +54,13 @@ def handle_connection(sock, addr):
         if not chunk:
             return None
         recieved += chunk
+        print(recieved)
     event = json.loads(recieved.decode("utf-8"))
 
     msg_type = event["type"]
 
-    if (msg_type == "STORE_EVENT"):
+    if (msg_type == "STORE_EVENT" or msg_type == "NODE_STATUS"):
         store_event(event)
-    elif (msg_type == "NODE_STATUS"):
-        ack(event["msg_id"], True)
     else:
         print("Uh oh... Invalid thing")
 
@@ -90,12 +91,11 @@ def main():
 
         try:
             # all messages must end with }\n
-            message = handle_connection(client_socket, client_address)
-            print(message)
-
+            client_socket.sendall(handle_connection(client_socket, client_address).encodee("utf-8"))
             
         finally:
             client_socket.close()
 
 
-
+if __name__ == "__main__":
+    main()
