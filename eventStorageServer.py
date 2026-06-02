@@ -21,15 +21,6 @@ def ack(msg_id, success, error_msg=""):
 
     return f"{size} "
 
-def handle_message(event):
-    msg_type = event["type"]
-
-    if (msg_type == "STORE_EVENT"):
-        store_event(event)
-    elif (msg_type == "NODE_STATUS"):
-        ack(event["msg_id"], True)
-    else:
-        print("Uh oh... Invalid thing")
 
 # Probably stores
 def store_event(event):
@@ -61,7 +52,17 @@ def handle_connection(sock, addr):
         if not chunk:
             return None
         recieved += chunk
-    return json.loads(recieved.decode("utf-8"))
+    event = json.loads(recieved.decode("utf-8"))
+
+    msg_type = event["type"]
+
+    if (msg_type == "STORE_EVENT"):
+        store_event(event)
+    elif (msg_type == "NODE_STATUS"):
+        ack(event["msg_id"], True)
+    else:
+        print("Uh oh... Invalid thing")
+
 
 # Parameters:
 # Self Host & Port
@@ -92,10 +93,6 @@ def main():
             message = handle_connection(client_socket, client_address)
             print(message)
 
-            handle_message(message)
-
-            
-            
             
         finally:
             client_socket.close()
