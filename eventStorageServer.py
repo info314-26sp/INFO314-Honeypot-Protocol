@@ -25,7 +25,7 @@ def store_event(event):
     try:
         with open(file_location, 'r') as file:
             events = json.load(file)
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         events = []
 
     if check_duplicate_event(events, event):
@@ -48,8 +48,8 @@ def check_duplicate_event(events, event):
     #         events = json.load(file)
     # except FileNotFoundError:
     #     return False
-    seen_events = [events["event_id"] for item in events]
-    print(seen_events)
+    seen_events = [item["event_id"] for item in events]
+    return (event["event_id"] in seen_events)
 
 # Takes in incoming stream and converts it into event object (kson)
 # Finishes recieving with }\n
@@ -99,7 +99,7 @@ def main():
 
         try:
             # all messages must end with }\n
-            client_socket.sendall(handle_connection(client_socket, client_address).encodee("utf-8"))
+            client_socket.sendall(handle_connection(client_socket, client_address).encode("utf-8"))
             
         finally:
             client_socket.close()
