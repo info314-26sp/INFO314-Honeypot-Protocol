@@ -169,7 +169,7 @@ def run_attacker(tag, color):
             scenario(tag, color)
         except Exception as e:
             log(tag, f"Scenario error: {e}", RED)
-        time.sleep(random.uniform(8.0, 14.0))
+        time.sleep(random.uniform(6.0, 11.0))
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
