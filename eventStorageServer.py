@@ -1,9 +1,7 @@
 import sys
 import socket
-import os
 import time
 import json
-import csv
 import uuid
 
 event_log_location = "eventLog.json"
@@ -162,3 +160,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# My test cases:
+# echo '{"type": "STORE_EVENT", "msg_id": "123", "event_id": "100"}' | nc localhost 8080
+# echo '{"type": "QUERY", "search": {"event_id": "100"}, "msg_id": 5}' | nc localhost 8080
+# echo '{"type": "NODE_STATUS", "msg_id": "123", "event_id": "4"}' | nc localhost 8080
+# 
