@@ -4,7 +4,8 @@ import os
 import time
 import json
 
-file_location = "eventLog.json"
+event_log_location = "eventLog.json"
+node_log_location = "nodeLog.json"
 
 # Acknowledges everything from central brain
 def ack(msg_id, success, error_msg=""):
@@ -21,25 +22,45 @@ def ack(msg_id, success, error_msg=""):
 
 # Probably stores
 def store_event(event):
-    # load file's material
-    try:
-        with open(file_location, 'r') as file:
-            events = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        events = []
+    
+    if event["type"] == "STORE_EVENT":
+        # load file's material
+        try:
+            with open(event_log_location, 'r') as file:
+                events = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            events = []
 
-    if check_duplicate_event(events, event):
-        return ack(event["msg_id"], False, f"Event {event["event_id"]} already logged")
+        # Check duplicates for events
+        if check_duplicate_event(events, event):
+            return ack(event["msg_id"], False, f"Event {event["event_id"]} already logged")
+        
+        # Set logging location
+        log_location = event_log_location
+    elif event["type"] == "NODE_STATUS":
+        # Load file. I don't think there's a need to check duplicate heartbeats
+        try:
+            with open(node_log_location, 'r') as file:
+                events = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            events = []
+
+        # Set log loc
+        log_location = node_log_location
 
     # write file + add new event
     events.append(event) 
     try: 
-        with open(file_location, 'w') as file:
+        with open(log_location, 'w') as file:
             json.dump(events, file)
-    except:  # I dont know what exceptions this can throw
-        ack(event["msg_id"], False, f"Event {event["event_id"]} failed to log")
+    except:
+        return ack(event["msg_id"], False, f"Event {event["event_id"]} failed to log")
 
     return ack(event["msg_id"], True)
+
+# Returns a requested record
+def respond_query():
+    print("hi")
 
 # Checks the log file to check if event_id has already been logged
 def check_duplicate_event(events, event):
@@ -69,6 +90,8 @@ def handle_connection(sock, addr):
 
     if (msg_type == "STORE_EVENT" or msg_type == "NODE_STATUS"):
         return store_event(event)
+    elif msg_type == "QUERY":
+        return respond_query(event)
     else:
         print("Uh oh... Invalid thing")
 
@@ -85,7 +108,7 @@ def main():
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    log_path = sys.argv[3] # Logging loc
+    node_log_location = sys.argv[3] or node_log_location # Logging loc
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
