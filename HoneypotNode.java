@@ -23,19 +23,27 @@ public class HoneypotNode {
     private static int    httpPort  = 8080;
 
     // Behavioral config — modified by CONTROL_COMMAND (temporary) / CONFIG_UPDATE (persistent)
-    static volatile int     responseDelayMs = 0;
-    static volatile boolean dropConnections = false;
-    static volatile int     attempts        = Integer.MAX_VALUE;
-    static volatile String  errorResp       = "";
-    private static NodeState defaultConfig  = new NodeState();
+    static volatile int     responseDelayMs   = 0;
+    static volatile boolean dropConnections   = false;
+    static volatile int     heartbeatInterval = 30;
+    static volatile int     attempts          = Integer.MAX_VALUE;
+    static volatile String  errorResp         = "";
+    private static NodeState defaultConfig    = new NodeState();
+
+    // Class-level so SET_HEARTBEAT_INTERVAL can restart the scheduler
+    static ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(1);
+    static final AtomicInteger heartbeatSeq = new AtomicInteger(0);
 
     static final Map<String, Consumer<JsonObject>> commandHandlers = new HashMap<>();
     static {
-        commandHandlers.put("SLOW_RESPONSE",        params -> responseDelayMs = params.get("delay_ms").getAsInt());
-        commandHandlers.put("DROP_CONNECTION",       params -> dropConnections = params.get("drop").getAsBoolean());
-        commandHandlers.put("SET_ATTEMPTS",          params -> attempts = params.get("attempts").getAsInt());
-        commandHandlers.put("SET_ERROR_RESPONSE",    params -> errorResp = params.get("msg").getAsString());
-        commandHandlers.put("SET_HEARTBEAT_INTERVAL",params -> {});  // interval is hardcoded; ack without applying
+        commandHandlers.put("SLOW_RESPONSE",         params -> responseDelayMs = params.get("delay_ms").getAsInt());
+        commandHandlers.put("DROP_CONNECTION",        params -> dropConnections = params.get("drop").getAsBoolean());
+        commandHandlers.put("SET_ATTEMPTS",           params -> attempts = params.get("attempts").getAsInt());
+        commandHandlers.put("SET_ERROR_RESPONSE",     params -> errorResp = params.get("msg").getAsString());
+        commandHandlers.put("SET_HEARTBEAT_INTERVAL", params -> {
+            heartbeatInterval = params.get("interval_s").getAsInt();
+            startHeartbeat();
+        });
     }
 
     public static void main(String[] args) throws IOException {
@@ -50,11 +58,7 @@ public class HoneypotNode {
         toBrain = new PrintWriter(cBrainSocket.getOutputStream(), true);
 
         authMsg();
-
-        AtomicInteger heartbeatSeq = new AtomicInteger(0);
-        ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(1);
-        heartbeatScheduler.scheduleAtFixedRate(
-            () -> sendHeartbeat(heartbeatSeq.incrementAndGet()), 0, 30, TimeUnit.SECONDS);
+        startHeartbeat();
 
         ExecutorService executor = Executors.newFixedThreadPool(4);
         executor.submit(() -> listenOnPort(sshPort,  "SSH"));
@@ -197,17 +201,19 @@ public class HoneypotNode {
 
     // Resets transient CONTROL_COMMAND changes back to the current baseline.
     private static void rollback() {
-        responseDelayMs = defaultConfig.responseDelayMs;
-        dropConnections = false;
-        attempts        = defaultConfig.attempts;
-        errorResp       = defaultConfig.errorResp;
+        responseDelayMs   = defaultConfig.responseDelayMs;
+        dropConnections   = false;
+        heartbeatInterval = defaultConfig.heartbeatInterval;
+        attempts          = defaultConfig.attempts;
+        errorResp         = defaultConfig.errorResp;
     }
 
     // Makes the current settings the new baseline (called after CONFIG_UPDATE).
     private static void updateConfig() {
-        defaultConfig.responseDelayMs = responseDelayMs;
-        defaultConfig.attempts        = attempts;
-        defaultConfig.errorResp       = errorResp;
+        defaultConfig.responseDelayMs   = responseDelayMs;
+        defaultConfig.heartbeatInterval = heartbeatInterval;
+        defaultConfig.attempts          = attempts;
+        defaultConfig.errorResp         = errorResp;
     }
 
     // ── Outgoing messages to brain ────────────────────────────────────────────
@@ -239,6 +245,16 @@ public class HoneypotNode {
         System.out.println("HEARTBEAT #" + seqNum + " sent");
     }
 
+    // (Re)starts the heartbeat scheduler at the current heartbeatInterval.
+    private static synchronized void startHeartbeat() {
+        heartbeatScheduler.shutdownNow();
+        heartbeatScheduler = Executors.newScheduledThreadPool(1);
+        heartbeatScheduler.scheduleAtFixedRate(
+            () -> sendHeartbeat(heartbeatSeq.incrementAndGet()),
+            0, heartbeatInterval, TimeUnit.SECONDS
+        );
+    }
+
     static void authMsg() {
         JsonObject auth = new JsonObject();
         auth.addProperty("type",        "AUTH");
@@ -248,6 +264,29 @@ public class HoneypotNode {
         auth.addProperty("timestamp",   System.currentTimeMillis());
         send(gson.toJson(auth));
         System.out.println("AUTH sent (node_id=" + NODE_ID + ")");
+    }
+
+    static void authInit(String nonce1) {
+        JsonObject auth = new JsonObject();
+        auth.addProperty("type",       "AUTH_INIT");
+        auth.addProperty("node_id",    NODE_ID);
+        auth.addProperty("msg_id",     UUID.randomUUID().toString());
+        auth.addProperty("node_nonce", nonce1);
+        auth.addProperty("timestamp",  System.currentTimeMillis());
+        send(gson.toJson(auth));
+    }
+
+    static void authResp(String nonce1, String nonce2, String sourceMsgId) {
+        JsonObject auth = new JsonObject();
+        auth.addProperty("type",            "AUTH_RESPONSE");
+        auth.addProperty("node_id",         NODE_ID);
+        auth.addProperty("msg_id",          UUID.randomUUID().toString());
+        auth.addProperty("reply_to_msg_id", sourceMsgId);
+        auth.addProperty("node_nonce",      nonce1);
+        auth.addProperty("challenge_nonce", nonce2);
+        auth.addProperty("proof",           nonce2 + nonce1);
+        auth.addProperty("timestamp",       System.currentTimeMillis());
+        send(gson.toJson(auth));
     }
 
     static void commandAck(String ackFor, String cmdMsgId, boolean applied) {
@@ -313,9 +352,10 @@ public class HoneypotNode {
     // ── NodeState snapshot ────────────────────────────────────────────────────
 
     static class NodeState {
-        int     responseDelayMs = 0;
-        boolean dropConnections = false;
-        int     attempts        = Integer.MAX_VALUE;
-        String  errorResp       = "";
+        int     responseDelayMs   = 0;
+        boolean dropConnections   = false;
+        int     heartbeatInterval = 30;
+        int     attempts          = Integer.MAX_VALUE;
+        String  errorResp         = "";
     }
 }
