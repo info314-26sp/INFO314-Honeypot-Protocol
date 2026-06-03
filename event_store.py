@@ -35,7 +35,6 @@ def check_duplicate(events, record, msg_type):
 # Probably stores
 def store_record(record, msg_type):
     msg_id = record.get("msg_id")
-    # load file's material
     with file_lock:
         try:
             with open(file_location, 'r') as f:
@@ -44,23 +43,45 @@ def store_record(record, msg_type):
             events = []
 
         if check_duplicate(events, record, msg_type):
+            print(f"[DUPLICATE] {msg_type} event_id={record.get('event_id')} — skipped")
             return ack(msg_id, False, f"Duplicate record {record.get('event_id')} already logged")
 
-        # write file + add new event
         record["record_type"] = msg_type
         events.append(record)
 
         try:
             with open(file_location, 'w') as f:
                 json.dump(events, f, indent=2)
-        except Exception as e:  # I dont know what exceptions this can throw
+        except Exception as e:
+            print(f"[ERROR] Failed to write record: {e}")
             return ack(msg_id, False, f"Failed to write record: {e}")
 
+    print(f"[STORED] {msg_type} | node={record.get('node_id', '?')[:8]} | total={len(events)}")
     return ack(msg_id, True)
 
 
-# Takes in incoming stream and converts it into event object (json)
-# Finishes recieving with }\n
+def respond_query(query):
+    msg_id = query.get("msg_id")
+    try:
+        with open(file_location, 'r') as f:
+            results = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        results = []
+
+    for field, value in query.get("search", {}).items():
+        results = [e for e in results if e.get(field) == value]
+
+    print(f"[QUERY] search={query.get('search')} → {len(results)} result(s)")
+    return json.dumps({
+        "type":         "QUERY_RESPONSE",
+        "msg_id":       str(uuid.uuid4()),
+        "query_msg_id": msg_id,
+        "result_count": len(results),
+        "results":      results,
+        "timestamp":    int(time.time() * 1000),
+    }) + "\n"
+
+
 def handle_connection(conn, addr):
     print(f"Recieving connection from {addr}")
     buf = ""
@@ -86,8 +107,11 @@ def handle_connection(conn, addr):
                 if msg_type in ("STORE_EVENT", "NODE_STATUS"):
                     response = store_record(msg, msg_type)
                     conn.sendall(response.encode("utf-8"))
+                elif msg_type == "QUERY":
+                    response = respond_query(msg)
+                    conn.sendall(response.encode("utf-8"))
                 else:
-                    print("Uh oh... Invalid thing")
+                    print(f"Unknown message type: {msg_type}")
     except Exception as e:
         print(f"Connection error from {addr}: {e}")
     finally:

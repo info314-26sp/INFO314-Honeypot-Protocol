@@ -1,3 +1,5 @@
 /venv
 /.vscode
 *.class
+eventLog.json
+nodeLog.json

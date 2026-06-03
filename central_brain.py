@@ -14,13 +14,17 @@ MAX_STORE_RETRIES = 3
 BRUTE_FORCE_THRESHOLD = 3    # login attempts from same IP within window
 PORT_SCAN_THRESHOLD = 5      # port probes from same IP within window
 RATE_WINDOW_SECONDS = 60
+CMD_ACK_TIMEOUT = 10.0       # seconds to wait for CMD_ACK before retry
+MAX_CMD_RETRIES = 3
 
 nodes = {}            # node_id -> {status, last_seen, missed, conn}
 seen_msg_ids = set()  # dedup cache
 store_conn = None     # persistent connection to Event Store
 lock = threading.Lock()
 store_lock = threading.Lock()
+commands_lock = threading.Lock()
 pending_pings = {}    # node_id -> {msg_id, sent_at}
+pending_commands = {} # msg_id -> {msg, conn, sent_at, retries}
 ip_events = {}        # source_ip -> [timestamp, ...]
 
 
@@ -34,6 +38,7 @@ def start(host, port, store_host, store_port):
     store_conn.connect((store_host, store_port))
 
     threading.Thread(target=monitor_heartbeats, daemon=True).start()
+    threading.Thread(target=monitor_commands, daemon=True).start()
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -191,6 +196,11 @@ def handle_event_report(msg, conn):
                 "timestamp": int(time.time() * 1000),
             }
             _send(conn, ctrl_cmd)
+            with commands_lock:
+                pending_commands[ctrl_cmd["msg_id"]] = {
+                    "msg": ctrl_cmd, "conn": conn,
+                    "sent_at": time.time(), "retries": 0,
+                }
             print(f"Dispatched {command['command']} to node {node_id} ({classification}, severity {severity})")
 
 
@@ -262,10 +272,39 @@ def handle_cmd_ack(msg, _):
     ack_for = msg.get("ack_for")
     applied = msg.get("applied")
     error_msg = msg.get("error_msg")
+    cmd_msg_id = msg.get("cmd_msg_id")
+    with commands_lock:
+        pending_commands.pop(cmd_msg_id, None)
     if not applied:
         print(f"Node {node_id} failed to apply {ack_for}: {error_msg}")
     else:
         print(f"Node {node_id} applied {ack_for} successfully")
+
+
+def monitor_commands():
+    while True:
+        time.sleep(5)
+        now = time.time()
+        with commands_lock:
+            snapshot = dict(pending_commands)
+        for msg_id, entry in snapshot.items():
+            if now - entry["sent_at"] < CMD_ACK_TIMEOUT:
+                continue
+            if entry["retries"] < MAX_CMD_RETRIES:
+                try:
+                    _send(entry["conn"], entry["msg"])
+                    with commands_lock:
+                        if msg_id in pending_commands:
+                            pending_commands[msg_id]["sent_at"] = now
+                            pending_commands[msg_id]["retries"] += 1
+                    print(f"Retrying CONTROL_COMMAND {msg_id[:8]} (attempt {entry['retries']+1}/{MAX_CMD_RETRIES})")
+                except Exception:
+                    with commands_lock:
+                        pending_commands.pop(msg_id, None)
+            else:
+                print(f"CONTROL_COMMAND {msg_id[:8]} unacknowledged after {MAX_CMD_RETRIES} retries — giving up")
+                with commands_lock:
+                    pending_commands.pop(msg_id, None)
 
 
 def monitor_heartbeats():

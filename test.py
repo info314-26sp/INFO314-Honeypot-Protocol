@@ -131,7 +131,7 @@ def scenario_port_sweep(tag, color):
     )
     log(tag, f"[PORT SWEEP] hitting {[p[1] for p in ports]}", RED)
     for port, label in ports:
-        connect_and_send(tag, color, port, label, ["probe"])
+        connect_and_send(tag, color, port, label, [])  # no data → PORT_PROBE
         time.sleep(random.uniform(0.3, 0.8))
 
 
