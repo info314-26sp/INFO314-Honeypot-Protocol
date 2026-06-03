@@ -23,11 +23,16 @@ public class HoneypotNode {
     static final Object interactionLock = new Object();
     
     
+    // heartbeat attribute helpers
+    static ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(1);
+    static AtomicInteger heartbeatSeq = new AtomicInteger(0);
+
     // Attributes related COMMANDS
     static int responseDelayMs = 0;
     static boolean dropConnections = false;
     static int activePort = 80;
     static String serviceType = "SSH";
+    static int heartbeatInterval = 30;
     static int attempts = Integer.MAX_VALUE;
     static String errorResp = "";
     private static NodeState defaultConfig = new NodeState(); 
@@ -53,6 +58,9 @@ public class HoneypotNode {
         });
 
         // CONFIG_UPDATE Commands
+        commandHandlers.put("SET_HEARTBEAT_INTERVAL", params -> {
+            heartbeatInterval = params.get("interval_s").getAsInt();
+        });
         // delete tbh ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         commandHandlers.put("SET_PORT", params -> {
             activePort = params.get("portNum").getAsInt();
@@ -60,6 +68,8 @@ public class HoneypotNode {
         commandHandlers.put("CHANGE_SERVICE", params -> {
             serviceType = params.get("service").getAsString();
         });
+
+        
     }
 
     // Main method 
@@ -70,13 +80,10 @@ public class HoneypotNode {
 
 
         // authenticate
-        authMsg("temp, change later");
+        authMsg("");
 
         // start heartbeat
-        AtomicInteger heartbeatSeq = new AtomicInteger(0);
-
-        ScheduledExecutorService heartbeat = Executors.newScheduledThreadPool(1);
-        heartbeat.scheduleAtFixedRate(() -> sendHeartbeat(heartbeatSeq.incrementAndGet()), 0, 30, TimeUnit.SECONDS);
+        startHeartbeat();
 
         // wait and listen
         ExecutorService executor = Executors.newFixedThreadPool(4);
@@ -337,6 +344,16 @@ public class HoneypotNode {
         beat.addProperty("node_id", NODE_ID);
         beat.addProperty("timestamp", System.currentTimeMillis());
         toBrain.println(gson.toJson(beat));
+    }
+
+    // heartbeat helper
+    private static void startHeartbeat() {
+        heartbeatScheduler.shutdownNow();
+        heartbeatScheduler = Executors.newScheduledThreadPool(1);
+        heartbeatScheduler.scheduleAtFixedRate(
+            () -> sendHeartbeat(heartbeatSeq.incrementAndGet()),
+            0, heartbeatInterval, TimeUnit.SECONDS
+        );
     }
 
     // MAY UPDATE LATER
