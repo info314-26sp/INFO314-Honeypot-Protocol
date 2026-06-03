@@ -1,5 +1,6 @@
 /venv
 /.vscode
 *.class
+__pycache__/
 eventLog.json
 nodeLog.json
