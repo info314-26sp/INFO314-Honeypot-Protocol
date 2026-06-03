@@ -3,6 +3,8 @@ import socket
 import os
 import time
 import json
+import csv
+import uuid
 
 event_log_location = "eventLog.json"
 node_log_location = "nodeLog.json"
@@ -22,7 +24,6 @@ def ack(msg_id, success, error_msg=""):
 
 # Probably stores
 def store_event(event):
-    
     if event["type"] == "STORE_EVENT":
         # load file's material
         try:
@@ -59,8 +60,39 @@ def store_event(event):
     return ack(event["msg_id"], True)
 
 # Returns a requested record
-def respond_query():
-    print("hi")
+# 
+# Queriable Features: event_id, node_id, source_ip, service, event_type, classification, severity, timestamps
+def respond_query(query):
+    # Open events
+    try:
+        with open(event_log_location, 'r') as file:
+            results = json.load(file)
+            # print(events)
+            # return json.dumps(events)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return query_response(query["msg_id"])
+    
+    for field in query.get("search", {}).keys():
+        filtered_results = []
+        for event in results:
+            if event[field] == query["search"][field]:
+                filtered_results.append(event)
+        results = filtered_results
+    
+    return query_response(query["msg_id"], len(results), results)
+
+
+def query_response(msg_id, result_count=0, results=[]):
+    return json.dumps(
+        {
+            "type": "QUERY_RESPONSE",
+            "msg_id": str(uuid.uuid4()),
+            "query_msg_id": msg_id,
+            "result_count": result_count,
+            "results": results,
+            "timestamp": int(time.time() * 1000) # milliseconds
+        }
+        ) + "\n"
 
 # Checks the log file to check if event_id has already been logged
 def check_duplicate_event(events, event):
@@ -108,7 +140,7 @@ def main():
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    node_log_location = sys.argv[3] or node_log_location # Logging loc
+    # node_log_location = sys.argv[3] or node_log_location # Logging loc
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
