@@ -20,7 +20,7 @@ SSH_PORT  = 2222
 FTP_PORT  = 2121
 HTTP_PORT = 8080
 
-NUM_ATTACKERS   = 3
+NUM_ATTACKERS   = 2
 CONNECT_TIMEOUT = 5
 
 BOLD    = "\033[1m"
@@ -85,7 +85,7 @@ def scenario_ssh_brute(tag, color):
     for _ in range(bursts):
         cred = f"{random.choice(LOGIN_USERS)}:{random.randint(1000, 9999)}"
         connect_and_send(tag, color, SSH_PORT, "SSH", [cred])
-        time.sleep(random.uniform(0.5, 1.2))
+        time.sleep(random.uniform(1.5, 2.5))
 
 
 def scenario_ftp_probe(tag, color):
@@ -100,7 +100,7 @@ def scenario_ftp_brute(tag, color):
     for _ in range(bursts):
         user = random.choice(LOGIN_USERS)
         connect_and_send(tag, color, FTP_PORT, "FTP", [f"USER {user}", f"PASS {random.randint(1000,9999)}"])
-        time.sleep(random.uniform(0.6, 1.5))
+        time.sleep(random.uniform(1.5, 2.5))
 
 
 def scenario_http_request(tag, color):
@@ -132,7 +132,7 @@ def scenario_port_sweep(tag, color):
     log(tag, f"[PORT SWEEP] hitting {[p[1] for p in ports]}", RED)
     for port, label in ports:
         connect_and_send(tag, color, port, label, [])  # no data → PORT_PROBE
-        time.sleep(random.uniform(0.3, 0.8))
+        time.sleep(random.uniform(1.0, 2.0))
 
 
 def scenario_mixed_burst(tag, color):
@@ -140,7 +140,7 @@ def scenario_mixed_burst(tag, color):
     for _ in range(random.randint(3, 5)):
         fn = random.choice([scenario_ssh_probe, scenario_ftp_probe, scenario_http_request])
         fn(tag, color)
-        time.sleep(random.uniform(0.8, 2.0))
+        time.sleep(random.uniform(2.0, 4.0))
 
 
 SCENARIOS = [
@@ -169,7 +169,7 @@ def run_attacker(tag, color):
             scenario(tag, color)
         except Exception as e:
             log(tag, f"Scenario error: {e}", RED)
-        time.sleep(random.uniform(3.0, 8.0))
+        time.sleep(random.uniform(8.0, 14.0))
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ def main():
     print(f"\n{BOLD}{'='*60}")
     print("  HDP Continuous Random Attack Test")
     print(f"{'='*60}{RESET}")
-    print(f"  {NUM_ATTACKERS} concurrent attackers → honeypot ports 2222/2121/8080")
+    print(f"  {NUM_ATTACKERS} concurrent attackers → honeypot ports 2222/2121/8080 (demo pace)")
     print("  Ctrl+C to stop.\n")
 
     for i in range(NUM_ATTACKERS):
