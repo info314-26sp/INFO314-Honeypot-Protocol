@@ -1,5 +1,4 @@
 
-
 import java.net.*;
 import java.io.*;
 import java.util.HashMap;
@@ -8,112 +7,85 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.security.MessageDigest;
-import javax.crypto.Mac; //(for HMAC)
-import java.security.Signature; //(for public/private key signing)
 
 import com.google.gson.*;
 
 public class HoneypotNode {
 
-    // HoneypotNode Class Attributes
     private static final String NODE_ID = UUID.randomUUID().toString();
     private static PrintWriter toBrain;
     private static final Gson gson = new Gson();
-    static final Object interactionLock = new Object();
-    
-    
-    // Attributes related COMMANDS
-    static int responseDelayMs = 0;
-    static boolean dropConnections = false;
-    static int activePort = 80;
-    static String serviceType = "SSH";
-    static int attempts = Integer.MAX_VALUE;
-    static String errorResp = "";
-    private static NodeState defaultConfig = new NodeState(); 
 
+    private static String brainHost = "localhost";
+    private static int    brainPort = 9000;
+    private static int    sshPort   = 2222;
+    private static int    ftpPort   = 2121;
+    private static int    httpPort  = 8080;
 
-    // Command Parameters
+    // Behavioral config — modified by CONTROL_COMMAND (temporary) / CONFIG_UPDATE (persistent)
+    static volatile int     responseDelayMs = 0;
+    static volatile boolean dropConnections = false;
+    static volatile int     attempts        = Integer.MAX_VALUE;
+    static volatile String  errorResp       = "";
+    private static NodeState defaultConfig  = new NodeState();
+
     static final Map<String, Consumer<JsonObject>> commandHandlers = new HashMap<>();
     static {
-        // CONTROL_COMMAND Commands
-        commandHandlers.put("SLOW_RESPONSE", params -> {
-            responseDelayMs = params.get("delay_ms").getAsInt();
-        });
-        commandHandlers.put("DROP_CONNECTION", params -> {
-            dropConnections = params.get("drop").getAsBoolean();
-        });
-        
-        // Both COMMAND_CONTROLS or CONFIG_UPDATE Commands
-        commandHandlers.put("SET_ATTEMPTS", params -> {
-            attempts = params.get("attempts").getAsInt();
-        });
-        commandHandlers.put("SET_ERROR_RESPONSE", params -> {
-            errorResp = params.get("msg").getAsString();
-        });
-
-        // CONFIG_UPDATE Commands
-        // delete tbh ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        commandHandlers.put("SET_PORT", params -> {
-            activePort = params.get("portNum").getAsInt();
-        });
-        commandHandlers.put("CHANGE_SERVICE", params -> {
-            serviceType = params.get("service").getAsString();
-        });
+        commandHandlers.put("SLOW_RESPONSE",        params -> responseDelayMs = params.get("delay_ms").getAsInt());
+        commandHandlers.put("DROP_CONNECTION",       params -> dropConnections = params.get("drop").getAsBoolean());
+        commandHandlers.put("SET_ATTEMPTS",          params -> attempts = params.get("attempts").getAsInt());
+        commandHandlers.put("SET_ERROR_RESPONSE",    params -> errorResp = params.get("msg").getAsString());
+        commandHandlers.put("SET_HEARTBEAT_INTERVAL",params -> {});  // interval is hardcoded; ack without applying
     }
 
-    // Main method 
-    public static void main(String[] args) throws IOException{
-        
-        Socket cBrainSocket = new Socket("localhost", 9000);
+    public static void main(String[] args) throws IOException {
+        if (args.length >= 1) brainHost = args[0];
+        if (args.length >= 2) brainPort = Integer.parseInt(args[1]);
+        if (args.length >= 3) sshPort   = Integer.parseInt(args[2]);
+        if (args.length >= 4) ftpPort   = Integer.parseInt(args[3]);
+        if (args.length >= 5) httpPort  = Integer.parseInt(args[4]);
+
+        System.out.println("Connecting to central brain at " + brainHost + ":" + brainPort);
+        Socket cBrainSocket = new Socket(brainHost, brainPort);
         toBrain = new PrintWriter(cBrainSocket.getOutputStream(), true);
 
+        authMsg();
 
-        // authenticate
-        authMsg("temp, change later");
-
-        // start heartbeat
         AtomicInteger heartbeatSeq = new AtomicInteger(0);
+        ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(1);
+        heartbeatScheduler.scheduleAtFixedRate(
+            () -> sendHeartbeat(heartbeatSeq.incrementAndGet()), 0, 30, TimeUnit.SECONDS);
 
-        ScheduledExecutorService heartbeat = Executors.newScheduledThreadPool(1);
-        heartbeat.scheduleAtFixedRate(() -> sendHeartbeat(heartbeatSeq.incrementAndGet()), 0, 30, TimeUnit.SECONDS);
-
-        // wait and listen
         ExecutorService executor = Executors.newFixedThreadPool(4);
-        executor.submit(() -> listenOnPort(22, "SSH"));
-        executor.submit(() -> listenOnPort(21, "FTP"));
-        executor.submit(() -> listenOnPort(80, "HTTP"));
-
-        executor.submit(() -> recieveUpdates(cBrainSocket));
-
-
+        executor.submit(() -> listenOnPort(sshPort,  "SSH"));
+        executor.submit(() -> listenOnPort(ftpPort,  "FTP"));
+        executor.submit(() -> listenOnPort(httpPort, "HTTP"));
+        executor.submit(() -> receiveUpdates(cBrainSocket));
     }
 
-    // ~~~~~~~~~~~~~~~~~~~~~~ METHODS ~~~~~~~~~~~~~~~~~~~~~~
+    // ── Network listeners ─────────────────────────────────────────────────────
 
-    // ~~~~ NETWORK LISTENERS ~~~~
-
-    // Listen for attackers on a given port
     static void listenOnPort(int port, String serviceType) {
-        try (ServerSocket serverSocker = new ServerSocket(port)) {
+        try (ServerSocket server = new ServerSocket(port)) {
+            System.out.println("Listening on port " + port + " (" + serviceType + ")");
             while (true) {
-                Socket attacker = serverSocker.accept();
-                synchronized (interactionLock) {
-                    handleAttacker(attacker, serviceType);
-                }   
+                Socket attacker = server.accept();
+                new Thread(() -> handleAttacker(attacker, serviceType)).start();
             }
         } catch (IOException e) {
-            System.out.println("Failed on port " + port);
+            System.out.println("Failed on port " + port + ": " + e.getMessage());
         }
     }
 
-    // Handle Interactions with the attacker
     static void handleAttacker(Socket attacker, String serviceType) {
-        try {
-            PrintWriter out = new PrintWriter(attacker.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(attacker.getInputStream()));
+        String sourceIp   = attacker.getInetAddress().getHostAddress();
+        int    sourcePort = attacker.getPort();
+        String eventType  = serviceType.equals("HTTP") ? "HTTP_REQUEST" : "LOGIN_ATTEMPT";
 
-            // DROP_CONNECTION Check
+        try {
+            PrintWriter    out = new PrintWriter(attacker.getOutputStream(), true);
+            BufferedReader in  = new BufferedReader(new InputStreamReader(attacker.getInputStream()));
+
             if (dropConnections) {
                 attacker.close();
                 return;
@@ -121,47 +93,44 @@ public class HoneypotNode {
 
             sendFakeBanner(out, serviceType);
 
-            // DELAY_MS Check
             if (responseDelayMs > 0) {
                 Thread.sleep(responseDelayMs);
             }
 
-
-            StringBuilder msgText = new StringBuilder();
+            StringBuilder capturedData = new StringBuilder();
             String line;
-            int attemptCount = 0;
+            int    attemptCount = 0;
 
             while ((line = in.readLine()) != null) {
-                attemptCount++;
-
-                // ATTEMPTS Check
-                if (attemptCount > attempts) {
+                if (++attemptCount > attempts) {
                     out.println(errorResp);
                     break;
                 }
-                msgText.append(line);
+                capturedData.append(line).append("\n");
             }
 
-            sendEventReport(serviceType, attacker.getInetAddress().toString(), msgText.toString());
+            JsonObject payload = new JsonObject();
+            payload.addProperty("data", capturedData.toString().trim());
+            sendEventReport(serviceType, sourceIp, sourcePort, eventType, payload);
 
         } catch (IOException e) {
-            System.out.println("400 Error: Client connection error");
+            System.out.println("Client connection error from " + sourceIp + ": " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }finally {
+        } finally {
             rollback();
+            try { attacker.close(); } catch (IOException ignored) {}
         }
     }
 
-    // Listen to and recieve messages from the Central Brain, then respond accordingly.
-    static void recieveUpdates(Socket brainSocket) {
+    // Listens for incoming messages from the Central Brain.
+    static void receiveUpdates(Socket brainSocket) {
         try {
             BufferedReader in = new BufferedReader(new InputStreamReader(brainSocket.getInputStream()));
-
             String line;
             while ((line = in.readLine()) != null) {
-                JsonObject msg = gson.fromJson(line, JsonObject.class);
-                String type = msg.get("type").getAsString();
+                JsonObject msg  = gson.fromJson(line, JsonObject.class);
+                String     type = msg.get("type").getAsString();
                 switch (type) {
                     case "PING":
                         echo(msg.get("msg_id").getAsString());
@@ -172,74 +141,52 @@ public class HoneypotNode {
                     case "CONFIG_UPDATE":
                         applyConfigUpdate(msg);
                         break;
-                    case "AUTH":
-                        authMsg(""); // UPDATE
-                        break;
-                    case "AUTH_OK":
-                        break;
-                    case "AUTH_CHALLENGE":
-                        break;
                 }
             }
-
         } catch (IOException e) {
-            System.out.println("500 error: Connection Lost");
+            System.out.println("Connection to brain lost: " + e.getMessage());
         }
     }
 
-    // ~~~~ COMMAND SETTING LOGIC ~~~~
+    // ── Command application ───────────────────────────────────────────────────
 
     static void applyControlCommand(JsonObject msg) {
-        String msgId = msg.get("msg_id").getAsString();
-
-
-        JsonArray commands = msg.get("cc_commands").getAsJsonArray();
+        String     msgId    = msg.get("msg_id").getAsString();
+        JsonArray  commands = msg.get("cc_commands").getAsJsonArray();
         for (JsonElement el : commands) {
-            JsonObject cmd = el.getAsJsonObject();
-            String command = cmd.get("command").getAsString();
-
-            // parameters?
-            JsonObject parameters = cmd.has("parameters") 
-                ? cmd.getAsJsonObject("parameters") 
-                : new JsonObject(); 
-            Consumer<JsonObject> handler = commandHandlers.get(command);
-
-            // could also add a case where command DNE
-            if (handler != null) {
-                try{
-                    handler.accept(parameters);
-                } catch (Exception e) {
-                    rollback();
-                    commandAck("CONTROL_COMMAND", msgId, false, "Failed to apply: " + command + " Resetting to default config. Error:" + e.getMessage());                    
-                    return;
-                }
-                
-            }
-        }
-
-        commandAck("CONTROL_COMMAND", msgId, true);
-    }
-
-
-    static void applyConfigUpdate(JsonObject msg) {
-        String msgId = msg.get("msg_id").getAsString();
-
-        JsonArray commands = msg.get("cu_commands").getAsJsonArray();
-        for (JsonElement el : commands) {
-            JsonObject cmd = el.getAsJsonObject();
-            String command = cmd.get("command").getAsString();
-
-            JsonObject parameters = cmd.has("parameters") 
-                ? cmd.getAsJsonObject("parameters") 
-                : new JsonObject(); 
-
+            JsonObject cmd     = el.getAsJsonObject();
+            String     command = cmd.get("command").getAsString();
+            JsonObject params  = cmd.has("parameters") ? cmd.getAsJsonObject("parameters") : new JsonObject();
             Consumer<JsonObject> handler = commandHandlers.get(command);
             if (handler != null) {
                 try {
-                    handler.accept(parameters);
+                    handler.accept(params);
                 } catch (Exception e) {
                     rollback();
-                    commandAck("CONFIG_UPDATE", msgId, false, "Failed to apply: " + command + " Resetting to default config. Error:" + e.getMessage());                    
+                    commandAck("CONTROL_COMMAND", msgId, false,
+                        "Failed to apply " + command + ": " + e.getMessage());
+                    return;
+                }
+            }
+        }
+        commandAck("CONTROL_COMMAND", msgId, true);
+    }
+
+    static void applyConfigUpdate(JsonObject msg) {
+        String    msgId    = msg.get("msg_id").getAsString();
+        JsonArray commands = msg.get("cu_commands").getAsJsonArray();
+        for (JsonElement el : commands) {
+            JsonObject cmd     = el.getAsJsonObject();
+            String     command = cmd.get("command").getAsString();
+            JsonObject params  = cmd.has("parameters") ? cmd.getAsJsonObject("parameters") : new JsonObject();
+            Consumer<JsonObject> handler = commandHandlers.get(command);
+            if (handler != null) {
+                try {
+                    handler.accept(params);
+                } catch (Exception e) {
+                    rollback();
+                    commandAck("CONFIG_UPDATE", msgId, false,
+                        "Failed to apply " + command + ": " + e.getMessage());
                     return;
                 }
             }
@@ -248,147 +195,103 @@ public class HoneypotNode {
         commandAck("CONFIG_UPDATE", msgId, true);
     }
 
-    // Rollback to default config settings
+    // Resets transient CONTROL_COMMAND changes back to the current baseline.
     private static void rollback() {
         responseDelayMs = defaultConfig.responseDelayMs;
         dropConnections = false;
-        activePort = defaultConfig.activePort;       
-        serviceType = defaultConfig.serviceType;
-        attempts = defaultConfig.attempts;
-        errorResp = defaultConfig.errorResp;
+        attempts        = defaultConfig.attempts;
+        errorResp       = defaultConfig.errorResp;
     }
 
-    // Overwrites the default config settings with the current config settings, making that the new default.
+    // Makes the current settings the new baseline (called after CONFIG_UPDATE).
     private static void updateConfig() {
         defaultConfig.responseDelayMs = responseDelayMs;
-        defaultConfig.dropConnections = false;
-        defaultConfig.activePort = activePort;
-        defaultConfig.serviceType = serviceType;
-        defaultConfig.attempts = attempts;
-        defaultConfig.errorResp = errorResp;
+        defaultConfig.attempts        = attempts;
+        defaultConfig.errorResp       = errorResp;
     }
 
+    // ── Outgoing messages to brain ────────────────────────────────────────────
 
-
-    
-    // ~~~~ OUTGOING MESSAGES TO BRAIN ~~~~
-
-    // Sends command acknowledgements; used after successful application
-    static void commandAck(String recievedType, String commandId, boolean success) {
-        JsonObject acky = new JsonObject();
-        acky.addProperty("type", "CMD_ACK");
-        acky.addProperty("msg_id", UUID.randomUUID().toString());
-        acky.addProperty("node_id", NODE_ID);
-        acky.addProperty("ack_for", recievedType );
-        acky.addProperty("cmd_msg_id",  commandId);
-        acky.addProperty("applied", success);
-        acky.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(acky));
-
-    }
-    
-    // Sends command acknowledgements; used after command application fails
-    static void commandAck(String recievedType, String commandId, boolean success, String error) {
-        JsonObject acky = new JsonObject();
-        acky.addProperty("type", "CMD_ACK");
-        acky.addProperty("msg_id", UUID.randomUUID().toString());
-        acky.addProperty("node_id", NODE_ID);
-        acky.addProperty("ack_for", recievedType );
-        acky.addProperty("cmd_msg_id",  commandId);
-        acky.addProperty("applied", success);
-        acky.addProperty("error_msg", error);
-        acky.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(acky));
-    }
-
-
-
-
-    // Event Report for when no data is attatched
-    static void sendEventReport(String serviceType, String sourceIp) {
+    static void sendEventReport(String service, String sourceIp, int sourcePort,
+                                String eventType, JsonObject payload) {
         JsonObject msg = new JsonObject();
-        msg.addProperty("type", "EVENT_REPORT");
-        msg.addProperty("msg_id", UUID.randomUUID().toString());
-        msg.addProperty("node_id", NODE_ID);
-        msg.addProperty("service_type", serviceType);
-        msg.addProperty("source_ip", sourceIp);
-        msg.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(msg));
-    }
-
-    // Event Report for when there's accompanying data
-    static void sendEventReport(String serviceType, String sourceIp, String data) {
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "EVENT_REPORT");
-        msg.addProperty("msg_id", UUID.randomUUID().toString());
-        msg.addProperty("node_id", NODE_ID);
-        msg.addProperty("service_type", serviceType);
-        msg.addProperty("source_ip", sourceIp);
-        msg.addProperty("captured_data", data);
-        msg.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(msg));
+        msg.addProperty("type",        "EVENT_REPORT");
+        msg.addProperty("msg_id",      UUID.randomUUID().toString());
+        msg.addProperty("node_id",     NODE_ID);
+        msg.addProperty("source_ip",   sourceIp);
+        msg.addProperty("source_port", sourcePort);
+        msg.addProperty("service",     service);
+        msg.addProperty("event_type",  eventType);
+        msg.add(        "payload",     payload);
+        msg.addProperty("timestamp",   System.currentTimeMillis());
+        send(gson.toJson(msg));
+        System.out.println("EVENT_REPORT sent: " + eventType + " from " + sourceIp + " on " + service);
     }
 
     static void sendHeartbeat(int seqNum) {
-        JsonObject beat = new JsonObject();
-        beat.addProperty("type", "HEARTBEAT");
-        beat.addProperty("seq_num", seqNum);
-        beat.addProperty("msg_id", UUID.randomUUID().toString());
-        beat.addProperty("node_id", NODE_ID);
-        beat.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(beat));
-    }
-
-    // MAY UPDATE LATER
-    static void authMsg(String cred) {
-        JsonObject auth = new JsonObject();
-        auth.addProperty("type", "AUTH");
-        auth.addProperty("node_id", NODE_ID);
-        auth.addProperty("msg_id", UUID.randomUUID().toString());
-        auth.addProperty("timestamp", System.currentTimeMillis());
-        auth.addProperty("credentials", cred);
-        toBrain.println(gson.toJson(auth));
-    }     
-
-    // improved auth
-    static void authInit(String nonce1) {
-        JsonObject auth = new JsonObject();
-        auth.addProperty("type", "AUTH_INIT" );
-        auth.addProperty("node_id", NODE_ID);
-        auth.addProperty("msg_id", UUID.randomUUID().toString());
-        auth.addProperty("node_nonce", nonce1);
-        auth.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(auth));
-    }
-
-
-    // edit this
-    static void authResp(String nonce1, String nonce2, String sourceMsgId) {
-        JsonObject auth = new JsonObject();
-        auth.addProperty("type", "AUTH_RESPONSE");
-        auth.addProperty("node_id", NODE_ID);
-        auth.addProperty("msg_id", UUID.randomUUID().toString());
-        auth.addProperty("reply_to_msg_id", sourceMsgId);
-        auth.addProperty("node_nonce", nonce1);
-        auth.addProperty("challenge_nonce", nonce2);
-        auth.addProperty("proof", nonce2 + nonce1);
-        auth.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(auth));
-    }
-
-
-    static void echo(String sourceMsgId) {
         JsonObject msg = new JsonObject();
-        msg.addProperty("type", "ECHO");
-        msg.addProperty("msg_id", UUID.randomUUID().toString());
-        msg.addProperty("reply_to_msg_id", sourceMsgId);
-        msg.addProperty("node_id", NODE_ID);
+        msg.addProperty("type",      "HEARTBEAT");
+        msg.addProperty("seq_num",   seqNum);
+        msg.addProperty("msg_id",    UUID.randomUUID().toString());
+        msg.addProperty("node_id",   NODE_ID);
         msg.addProperty("timestamp", System.currentTimeMillis());
-        toBrain.println(gson.toJson(msg)); 
+        send(gson.toJson(msg));
+        System.out.println("HEARTBEAT #" + seqNum + " sent");
     }
 
+    static void authMsg() {
+        JsonObject auth = new JsonObject();
+        auth.addProperty("type",        "AUTH");
+        auth.addProperty("msg_id",      UUID.randomUUID().toString());
+        auth.addProperty("node_id",     NODE_ID);
+        auth.addProperty("credentials", "");
+        auth.addProperty("timestamp",   System.currentTimeMillis());
+        send(gson.toJson(auth));
+        System.out.println("AUTH sent (node_id=" + NODE_ID + ")");
+    }
 
-    // ~~~~ ADVERSARY INTERACTION CHANGES ~~~~
+    static void commandAck(String ackFor, String cmdMsgId, boolean applied) {
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type",       "CMD_ACK");
+        msg.addProperty("msg_id",     UUID.randomUUID().toString());
+        msg.addProperty("node_id",    NODE_ID);
+        msg.addProperty("ack_for",    ackFor);
+        msg.addProperty("cmd_msg_id", cmdMsgId);
+        msg.addProperty("applied",    applied);
+        msg.addProperty("timestamp",  System.currentTimeMillis());
+        send(gson.toJson(msg));
+    }
+
+    static void commandAck(String ackFor, String cmdMsgId, boolean applied, String errorMsg) {
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type",       "CMD_ACK");
+        msg.addProperty("msg_id",     UUID.randomUUID().toString());
+        msg.addProperty("node_id",    NODE_ID);
+        msg.addProperty("ack_for",    ackFor);
+        msg.addProperty("cmd_msg_id", cmdMsgId);
+        msg.addProperty("applied",    applied);
+        msg.addProperty("error_msg",  errorMsg);
+        msg.addProperty("timestamp",  System.currentTimeMillis());
+        send(gson.toJson(msg));
+    }
+
+    static void echo(String pingMsgId) {
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type",      "ECHO");
+        msg.addProperty("msg_id",    UUID.randomUUID().toString());
+        msg.addProperty("node_id",   NODE_ID);
+        msg.addProperty("ping_id",   pingMsgId);
+        msg.addProperty("timestamp", System.currentTimeMillis());
+        send(gson.toJson(msg));
+        System.out.println("ECHO sent in response to PING " + pingMsgId);
+    }
+
+    private static synchronized void send(String json) {
+        toBrain.println(json);
+    }
+
+    // ── Fake service banners ──────────────────────────────────────────────────
+
     static void sendFakeBanner(PrintWriter out, String serviceType) {
         switch (serviceType) {
             case "SSH":
@@ -398,34 +301,21 @@ public class HoneypotNode {
                 out.println("220 FTP server ready");
                 break;
             case "HTTP":
-                out.println("HTTP/1.1 200 OK\\r\\nServer: Apache/2.4.41\\r\\n");
+                out.print("HTTP/1.1 200 OK\r\nServer: Apache/2.4.41\r\n\r\n");
+                out.flush();
                 break;
             default:
                 out.println("220 Service ready");
                 break;
-
-        }   
-    }
-
-
-    // ~~~~ NODESTATE SUBCLASS ~~~~
-    // Saves the default config settings
-    static class NodeState {
-         int responseDelayMs;
-         boolean dropConnections;
-         int activePort;
-         String serviceType;
-         int attempts;
-         String errorResp;
-
-        NodeState() {
-            this.responseDelayMs = HoneypotNode.responseDelayMs;
-            this.dropConnections = HoneypotNode.dropConnections;
-            this.activePort = HoneypotNode.activePort;
-            this.serviceType = HoneypotNode.serviceType;
-            this.attempts = HoneypotNode.attempts;
-            this.errorResp = HoneypotNode.errorResp;
         }
     }
 
+    // ── NodeState snapshot ────────────────────────────────────────────────────
+
+    static class NodeState {
+        int     responseDelayMs = 0;
+        boolean dropConnections = false;
+        int     attempts        = Integer.MAX_VALUE;
+        String  errorResp       = "";
+    }
 }
