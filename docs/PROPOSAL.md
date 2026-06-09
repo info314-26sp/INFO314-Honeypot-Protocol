@@ -73,7 +73,7 @@ Our protocol addresses several failure scenarios that are likely to occur in a r
 
 ## **Testing and Validation Summary**
 
-System behavior was validated using custom made tests (located in [test.py](tests/test.py)), that simulates multiple attackers interacting with all three Honeypot Node ports simultaneously. The test gnerates randomized attack scenarios, including SSH brute force, FTP credential Stuffing, and HTTP requests.
+System behavior was validated using custom made tests (located in [test.py](../tests/test.py)), that simulates multiple attackers interacting with all three Honeypot Node ports simultaneously. The test gnerates randomized attack scenarios, including SSH brute force, FTP credential Stuffing, and HTTP requests.
 
 Correct behavior was verified by observing component interactions, and comparing them to the expected baseline. Specifically, we tested things like if EVENT_REPORTs were recieved and classified by the Central Brain, if STORE_EVENTs were persisted to the Event Store, if NODE_STATUS records were written on node disconnection and recovery, etc.  
 
