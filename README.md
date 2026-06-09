@@ -30,13 +30,11 @@ The system is composed of three independently running components:
 
 All components communicate exclusively over TCP using HDP, a custom JSON-based messaging protocol. The protocol is designed for internal use only and is never exposed to the network being monitored.
 
-See the full message specification in [`PROTOCOL.md`](docs\PROTOCOL.MD).
+See the full message specification in [`PROTOCOL.md`](docs/PROTOCOL.MD).
 
 ---
 
 
-<<<<<<< HEAD
-=======
 ## Running
 
 ### Prerequisites
@@ -77,10 +75,9 @@ Ports used: Central Brain listens on **9000**, Event Store on **9001**. Honeypot
 
 ---
 
->>>>>>> 815d31a64e89ebcd74266d3ad88d188c59aa9c2a
 ## Further Reading
-[Protocol Specification](docs\PROPOSAL.md)  
-[Project Proposal](docs\PROTOCOL.MD)
+[Protocol Specification](docs/PROPOSAL.md)  
+[Project Proposal](docs/PROTOCOL.MD)
 
 ---
 
