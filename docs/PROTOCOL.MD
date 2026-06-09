@@ -1,14 +1,16 @@
-# Project Draft 1 - HDP Protocol Design
+# HDP Protocol Design
 By Anthony Covello, Francis Dinh, Eli Gold
 
 ---
+### Message Overviews
+
 **Honeypot Node:**
 - HEARTBEAT (to Brain) ~ Let Brain know it's active 
 - EVENT_REPORT (to Brain) ~ Let Brain know about an Event
 - FAKE_BANNER (to external user) ~ Send out Honeypot Message to External User 
 - AUTH (to Brain) ~ Sent to Brain in setup to Authenticate itself as a real node
-- PING_RESPONSE (to Brain) ~ Response to Brain's PING to confirm it's alive 
-- COMMAND_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted 
+- ECHO (to Brain) ~ Response to Brain's PING to confirm it's alive 
+- CMD_ACK (to Brain) ~ Confirmation that a CONTROL_COMMAND or CONFIG_UPDATE has been recieved and if it's been enacted 
 
 **Central Brain:**
 - CONTROL_COMMAND (to Honeypot) ~ Specific, in-moment instructions and adjustments sent to Honeypot as a reaction to detected attack behavior
@@ -22,46 +24,6 @@ By Anthony Covello, Francis Dinh, Eli Gold
 - QUERY_RESPONSE (to external user) ~ Sent to external user to meet the demands of their query 
 
 ---
-### **Requirements and Example:**
-This protocol specification should include:
-
-1. A list of all message types
-2. A short, one sentence description of each message type
-3. The structure and format for each message
-4. Which components send and/or receive this message
-5. Required and optional fields (if any) for each message
-6. Expected response(s) (if any)
-7. Any expected side effects (e.g., "saves the message to disk")
-8. At least one example message for each
-
-### *Example*
-
-~~~~~
-Message: CREATE_TASK (R1)
-Description: Requests that the server record the existence of a new task. (R2)
-Sender: Client → Server (R4)
-
-Format: JSON over TCP (R3)
-
-Fields: (R5)
-- task_id (string, required)
-- description (string, required)
-- priority (int, optional)
-
-Response: (R6)
-- SUCCESS or ERROR
-
-Side Effects: (R7)
-- Server saves the new task to its database
-
-Example: (R8)
-{
-  "type": "CREATE_TASK",
-  "task_id": "task-001",
-  "description": "Write the quarterly report",
-  "priority": 2
-}
-~~~~~
 
 ### Message References
 
@@ -69,7 +31,7 @@ Example: (R8)
 
 ~~~~~
 Message: HEARTBEAT
-Description: Message sent at every 30 second interval to confirm node's operational status
+Description: Message sent at every x second interval (30 by default) to confirm node's operational status
 Sender: Honeypot Node → Central Brain
 
 Format: JSON over TCP
@@ -127,12 +89,12 @@ Format: JSON over TCP
 Fields:
 - msg_id (string, required)
 - node_id (string, required)
-- timestamp (long, required)
 - source_ip (string, required)
 - source_port (int, required)
 - service (string, required) - simulated service that was hit (e.g. "SSH", "HTTP", "FTP")
 - event_type (string, required) - type of interaction (e.g. "LOGIN_ATTEMPT", "PORT_PROBE")
 - payload (object, optional) - captured interaction data, such as attempted username/password, HTTP request data, etc.
+- timestamp (long, required)
 
 Response:
 - No response
@@ -202,10 +164,11 @@ Sender: Honeypot Node → Central Brain
 Format: JSON over TCP
 
 Fields:
+- msg_id (string, required)
 - node_id (string, required)
 - timestamp (long, required)
 - credentials (string, required) - Node's security certificate
-- attempts (int, optional) - Incremented if there are prior unsuccessful AUTH attempts
+
 
 Response:
 - CONFIG_UPDATE on success
@@ -220,6 +183,7 @@ Example:
   "type": "AUTH",
   "timestamp": 1771434180000,
   "credentials": "90nWW88O0lOl1sJ8oM1jkk42FIJ8O9A9P44UlFW1ojI7712Mjn42Mfq8sP90jR199aOK1JkIPdOsifiI9j7nQQf9kf2FfkwOk7j8U2jn9O7lpQQpW2O4I0njOk4kd",
+  "msg_id": "b289f0b8-ed66-4570-b249-d00be6a33cf3",
   "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2"
 }
 ~~~~~
@@ -234,6 +198,7 @@ Format: JSON over TCP
 Fields:
 - msg_id (string, required)
 - node_id (string, required)
+- ping_id (string, required)
 - timestamp (long, required)
 
 Response:
@@ -247,7 +212,8 @@ Example:
   "type": "ECHO",
   "msg_id": "b289f0b8-ed66-4570-b249-d00be6a33cf3",
   "timestamp": 1771434180000,
-  "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2"
+  "node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
+  "ping_id": "b5c645j24-3402-4vvh-by94-452d0l0a43l4"
 }
 ~~~~~
 
@@ -346,9 +312,9 @@ Example:
   "rec_node_id": "b3c89a24-1102-4bbf-bc9e-634d0b1a03d2",
   "cu_commands": [
     {
-      "command": "SET_PORTS",
+      "command": "SET_HEARTBEAT_INTERVAL",
       "parameters": {
-        "port_num": 80
+        "heartbeatInterval": 30
       }
     }
   ],
@@ -513,3 +479,34 @@ Example:
   "timestamp": 1771434200000
 }
 ~~~~~
+
+**Analyst Commands**
+
+~~~~~
+Message: QUERY
+
+Description: This is the message format that should be sent by an analyst to the Event Store to request records matching specific criteria.
+Sender: Analyst → Event Store
+
+Format: JSON over TCP
+
+Fields:
+- msg_id (string, required)
+- search (object, required) — key-value pairs to filter records by e.g. source_ip, classification, severity
+
+Response:
+- QUERY_RESPONSE
+
+Side Effects:
+- The analyst recieves back the records they requested.
+
+Example:
+{
+  "type": "QUERY",
+  "msg_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "search": {
+    "source_ip": "10.0.0.5"
+  }
+}
+~~~~~
+

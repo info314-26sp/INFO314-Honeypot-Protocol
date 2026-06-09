@@ -28,16 +28,16 @@ The architecture diagram above illustrates the primary message flows. The Attack
 
 The honeypot node is the outermost layer of the system and the only component that directly faces the network. It listens on multiple TCP ports simultaneously, each simulating a different vulnerable server: a fake SSH server on port 22 presenting a realistic OpenSSH banner, a fake FTP server on port 21, and a fake HTTP login page on port 80\. When a connection arrives, the node accepts it, presents its respective banner, records everything the client sends, then closes the connection after a configurable timeout.  The node does not implement real versions of these services. It does not execute commands, support encryption, or behave like a real operating system. Its sole purpose is to observe and report. 
 
-The honeypot node maintains its current behavioral configuration, a local buffer of unacknowledged events, and its own node ID. It sends EVENT\_REPORT messages to the Central Brain when an interaction is captured and HEARTBEAT messages periodically to signal liveness. It receives CONTROL\_COMMAND and CONFIG\_UPDATE messages from the Central brain, instructing changes to its behavior, as well as PING messages as liveness probes. 
+The honeypot node maintains its current behavioral configuration, and its own node ID. It sends EVENT\_REPORT messages to the Central Brain when an interaction is captured and HEARTBEAT messages periodically to signal liveness. It receives CONTROL\_COMMAND and CONFIG\_UPDATE messages from the Central brain, instructing changes to its behavior. It also responds to PING messages with an ECHO to confirm liveness." 
 
 ### **Component 2:  Central Brain**
 
 The Central Brain is the decision-making core of the system. It acts as both an event analyzer and a network coordinator. It receives raw interaction events from honeypot nodes, applies detection rules to classify attacker behavior, determines an appropriate response, and pushes commands back to the relevant nodes. It is the only component that communicates with both the honeypot nodes and the Event Store. 
 
 The Central Brain maintains a registry of all known honeypot nodes and their current status, a rolling window of recent events, a rolling window of recent events per source IP for pattern detection, a cache of recently seen msg\_id values, and a queue of outbound commands awaiting acknowledgement.   
-When a classified event meets a severity threshold, the Central Brain dispatches a CONTROL\_COMMAND to the originating honeypot, and simultaneously forwards the event to the Event Store via STORE\_EVENT. 
+When a classified event meets a severity threshold, the Central Brain dispatches a CONTROL\_COMMAND to the originating honeypot, and then forwards the event to the Event Store via STORE\_EVENT. 
 
-In addition, when a node is detected offline after 3 periods of missed HEARTBEATs, the Central Brain generates a NODE\_STAUS event and sends it to the Event Store to record the failure state.  If the node later recovers, a corresponding NODE\_STATUS update is again sent to the Event Store.  The Central Brain monitors node liveness continuously and updates its registry accordingly. 
+In addition, when a node is detected offline after 3 periods of missed HEARTBEATs, the Central Brain generates a NODE\_STATUS event and sends it to the Event Store to record the failure state.  If the node later recovers, a corresponding NODE\_STATUS update is again sent to the Event Store.  The Central Brain monitors node liveness continuously and updates its registry accordingly. 
 
 ### **Component 3:  Event Store** 
 
@@ -49,7 +49,7 @@ The Event Store maintains a persistent database of all system records, including
 
 **Scenario \#1: Attack Detection Flow**
 
-The attacker establishes a TCP connection to the Honeypot Node, which responds with a FAKE\_BANNER to present itself as a real service. The attacker sends probe data or credentials, which the node records locally. The Honeypot Node then forwards a structured EVENT\_REPORT to the Central Brain. The Central Brain classifies the behavior and sends a STORE\_EVENT to the Event Store for persistence. The Event Store persists the record and returns an ACK. If the classification meets a severity threshold, the Central Brain issues a CONTROL\_COMMAND back to the Honeypot Node to adjust its behavior.
+The attacker establishes a TCP connection to the Honeypot Node, which responds with a FAKE\_BANNER to present itself as a real service. The attacker sends probe data or credentials, which the node records locally. The Honeypot Node then forwards a structured EVENT\_REPORT to the Central Brain. The Central Brain classifies the behavior and sends a STORE\_EVENT to the Event Store for persistence. The Event Store persists the record and returns an ACK. If the classification meets a severity threshold, the Central Brain issues a CONTROL\_COMMAND back to the Honeypot Node to adjust its behavior. The node applies the commands and responds with a CMD\_ACK indicating whether the changes were successfully applied.
 
 ![Example Scenario 1](images/scenario1.png)
 
@@ -67,5 +67,22 @@ Our protocol addresses several failure scenarios that are likely to occur in a r
 
 **Messages take too long to arrive:** When the Central Brain sends a STORE\_EVENT to the Event Store, it expects an ACK in return within a defined timeout window. If no ACK arrives in time, the Central Brain resends the message, up to three times. After three failed attempts it logs a storage failure alert. The same retry logic applies to CONTROL\_COMMAND messages sent to honeypot nodes. This approach does not guarantee delivery under all network conditions, but it handles the common cases of packet loss or brief connectivity interruptions.
 
-**Node crashes:** Each honeypot node sends a HEARTBEAT message to the Central Brain every 30 seconds. If the Central Brain does not receive a heartbeat from a node after three consecutive intervals, it marks that node as offline and sends a PING to confirm. If the PING goes unanswered, the node remains marked offline and its events are no longer expected. When the node recovers and resumes sending heartbeats, the Central Brain marks it back online and immediately pushes a CONFIG\_UPDATE to resynchronize its configuration. Events captured by the node before the crash and buffered locally are resent once the connection is restored.  
+**Node crashes:** Each honeypot node sends a HEARTBEAT message to the Central Brain every 30 seconds. If the Central Brain does not receive a heartbeat from a node after three consecutive intervals, it marks that node as offline and sends a PING to confirm. If the PING goes unanswered, the node remains marked offline and its events are no longer expected. When the node recovers and resumes sending heartbeats, the Central Brain marks it back online and immediately pushes a CONFIG\_UPDATE to resynchronize its configuration.
+
 **Recovery messages:** Our protocol includes dedicated message types to support recovery. PING serves as an explicit liveness probe distinct from the passive heartbeat mechanism. CONFIG\_UPDATE serves as a resync message pushed to a node after it recovers from a crash, ensuring it does not operate on stale configuration. These are not general-purpose error codes but targeted recovery interactions built into the protocol from the start.  
+
+## **Testing and Validation Summary**
+
+System behavior was validated using custom made tests (located in [test.py](tests/test.py)), that simulates multiple attackers interacting with all three Honeypot Node ports simultaneously. The test gnerates randomized attack scenarios, including SSH brute force, FTP credential Stuffing, and HTTP requests.
+
+Correct behavior was verified by observing component interactions, and comparing them to the expected baseline. Specifically, we tested things like if EVENT_REPORTs were recieved and classified by the Central Brain, if STORE_EVENTs were persisted to the Event Store, if NODE_STATUS records were written on node disconnection and recovery, etc.  
+
+## Summary of Changes from Initial Proposal
+
+Several implementation decisions diverged rom the initial proposal, as we were met with resistance or discovered the need for extra features.  
+
+The Honeypot Node does not maintain a local buffer of unacknowledged events as originally described. Instead, events are forwarded immediately and not stored locally, so pre-crash events are not recovered on reconnect. Defauly service ports also were changed from 22, 21, and 80 to 2222, 2121, and 8080 to avoid requiring administrator privileges during development and testing.  The PING response message was also renamed ECHO rather than PING_RESPONSE.
+
+Authentication in the current implementation uses a plaintext shared secret rather than the challenge-response HMAC scheme that was originally envisioned, due to implementation complexity. In a future update to HDP, this should be the main feature that needs work.
+
+The CONFIG_UPDATE and CONTROL_COMMAND commands were expanded to include more options, like DROP_CONNECTION, SET_ATTEMPTS, SET_ERROR_RESPONSE, SLOW_RESPONSE and SET_HEARTBEAT_INTERVAL. However, in the current implementation, only SET_HEARTBEAT_INTERVAL is utilized.
