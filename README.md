@@ -76,16 +76,11 @@ Ports used: Central Brain listens on **9000**, Event Store on **9001**. Honeypot
 ---
 
 ## Further Reading
-[Protocol Specification](docs/PROPOSAL.md)  
-[Project Proposal](docs/PROTOCOL.MD)
+[Project Proposal](docs/PROPOSAL.md)  
+[Protocol Specification](docs/PROTOCOL.MD)
 
 ---
 
-## Status of This Memo  
----
-
-## Copyright Notice
----
 
 
 ## Tech Stack

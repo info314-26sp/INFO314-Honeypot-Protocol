@@ -73,13 +73,13 @@ Our protocol addresses several failure scenarios that are likely to occur in a r
 
 ## **Testing and Validation Summary**
 
-System behavior was validated using custom made tests (located in [test.py](../tests/test.py)), that simulates multiple attackers interacting with all three Honeypot Node ports simultaneously. The test gnerates randomized attack scenarios, including SSH brute force, FTP credential Stuffing, and HTTP requests.
+System behavior was validated using custom made tests (located in [test.py](../tests/test.py)), that simulates multiple attackers interacting with all three Honeypot Node ports simultaneously. The test generates randomized attack scenarios, including SSH brute force, FTP credential Stuffing, and HTTP requests.
 
-Correct behavior was verified by observing component interactions, and comparing them to the expected baseline. Specifically, we tested things like if EVENT_REPORTs were recieved and classified by the Central Brain, if STORE_EVENTs were persisted to the Event Store, if NODE_STATUS records were written on node disconnection and recovery, etc.  
+Correct behavior was verified by observing component interactions, and comparing them to the expected baseline. Specifically, we tested things like if EVENT_REPORTs were received and classified by the Central Brain, if STORE_EVENTs were persisted to the Event Store, if NODE_STATUS records were written on node disconnection and recovery, etc.  
 
 ## Summary of Changes from Initial Proposal
 
-Several implementation decisions diverged rom the initial proposal, as we were met with resistance or discovered the need for extra features.  
+Several implementation decisions diverged from the initial proposal, as we were met with resistance or discovered the need for extra features.  
 
 The Honeypot Node does not maintain a local buffer of unacknowledged events as originally described. Instead, events are forwarded immediately and not stored locally, so pre-crash events are not recovered on reconnect. Defauly service ports also were changed from 22, 21, and 80 to 2222, 2121, and 8080 to avoid requiring administrator privileges during development and testing.  The PING response message was also renamed ECHO rather than PING_RESPONSE.
 
