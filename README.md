@@ -35,6 +35,49 @@ See the full message specification in [`PROTOCOL.md`](PROTOCOL.md).
 ---
 
 
+<<<<<<< HEAD
+=======
+## Running
+
+### Prerequisites
+
+- Java (JDK 8+)
+- Python 3
+- tmux (`brew install tmux` on macOS)
+
+### Quick Start
+
+```bash
+./run.sh
+```
+
+This compiles the honeypot node and launches all four components (Attacker simulator, Honeypot Node, Central Brain, Event Store) in a 2×2 tmux layout. Each pane stays open after its process exits so you can read the output.
+
+### Manual Start
+
+Start each component in its own terminal in this order:
+
+```bash
+# 1. Event Store
+cd event-store && python3 event_store.py 127.0.0.1 9001
+
+# 2. Central Brain
+cd central-brain && python3 central_brain.py
+
+# 3. Honeypot Node (compile first)
+cd honeypot-node
+javac -cp lib/gson-2.13.1.jar HoneypotNode.java
+java -cp .:lib/gson-2.13.1.jar HoneypotNode localhost 9000 2222 2121 8080
+
+# 4. Attacker simulator
+cd tests && python3 test.py
+```
+
+Ports used: Central Brain listens on **9000**, Event Store on **9001**. Honeypot Node exposes fake SSH on **2222**, FTP on **2121**, and HTTP on **8080**.
+
+---
+
+>>>>>>> 815d31a64e89ebcd74266d3ad88d188c59aa9c2a
 ## Further Reading
 [Protocol Specification](PROTOCOL.md)  
 [Project Proposal](PROPOSAL.md)
